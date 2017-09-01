@@ -27,6 +27,7 @@ import android.support.design.widget.Snackbar;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -36,6 +37,7 @@ import android.webkit.WebViewClient;
 import android.widget.CompoundButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.vision.barcode.Barcode;
@@ -47,13 +49,13 @@ public class MainActivity extends Activity implements AdvancedWebView.Listener {
 
     private static final int RC_BARCODE_CAPTURE = 9001;
     private static final String TAG = "BarcodeMain";
-
+    private String barcodeNumber = "";
     private AdvancedWebView mWebView;
 
     private ProgressBar progressBar;
     FloatingActionButton fab;
 
-    String url = "http://example.com";
+    String url = "https://example.com";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +66,7 @@ public class MainActivity extends Activity implements AdvancedWebView.Listener {
         mWebView = (AdvancedWebView) findViewById(R.id.webview);
         mWebView.setListener(this, this);
         mWebView.loadUrl(url);
+        mWebView.addJavascriptInterface(new WebAppInterface(this), "Android");
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -74,7 +77,7 @@ public class MainActivity extends Activity implements AdvancedWebView.Listener {
             }
         });
 
-     }
+    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -82,13 +85,13 @@ public class MainActivity extends Activity implements AdvancedWebView.Listener {
             if (resultCode == CommonStatusCodes.SUCCESS) {
                 if (data != null) {
                     Barcode barcode = data.getParcelableExtra(BarcodeCaptureActivity.Barcode);
+                    barcodeNumber = barcode.displayValue;
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
-                                             mWebView.evaluateJavascript("self.$('input.ean').val(\""+barcode.displayValue+"\");  this.$('.button.barcode').click();", null);
+                        mWebView.evaluateJavascript("self.$('input.ean').val(\"" + barcode.displayValue + "\");  this.$('.button.barcode').click();", null);
                     } else {
-                                           mWebView.loadUrl("javascript:self.$('input.ean').val(\"" + barcode.displayValue + "\");  this.$('.button.barcode').click();");
+                        mWebView.loadUrl("javascript:self.$('input.ean').val(\"" + barcode.displayValue + "\");  this.$('.button.barcode').click();");
 
                     }
-                    // barcodeValue.setText(barcode.displayValue);
                     Log.d(TAG, "Barcode read: " + barcode.displayValue);
                 }
             }
@@ -99,12 +102,22 @@ public class MainActivity extends Activity implements AdvancedWebView.Listener {
     }
 
 
-
     @SuppressLint("NewApi")
     @Override
     protected void onResume() {
         super.onResume();
         mWebView.onResume();
+        if (mWebView.getUrl().contains("/pos/") && !barcodeNumber.equals("")) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                mWebView.evaluateJavascript("Android.validateBarcode($(\".popups\").find(\".modal-dialog:visible\").length);", null);
+                mWebView.evaluateJavascript("this.$('.button.cancel').click();", null);
+            } else {
+                mWebView.loadUrl("javascript:Android.validateBarcode($(\".popups\").find(\".modal-dialog:visible\").length);");
+                mWebView.loadUrl("javascript:this.$('.button.cancel').click();");
+
+            }
+        }
+            barcodeNumber = "";
 
     }
 
@@ -124,26 +137,60 @@ public class MainActivity extends Activity implements AdvancedWebView.Listener {
     }
 
 
-
     @Override
     public void onBackPressed() {
-        if (!mWebView.onBackPressed()) { return; }
+        if (!mWebView.onBackPressed()) {
+            return;
+        }
         // ...
         super.onBackPressed();
     }
 
     @Override
-    public void onPageStarted(String url, Bitmap favicon) {  progressBar.setVisibility(View.VISIBLE);}
+    public void onPageStarted(String url, Bitmap favicon) {
+        progressBar.setVisibility(View.VISIBLE);
+    }
 
     @Override
-    public void onPageFinished(String url) {  progressBar.setVisibility(View.GONE);}
+    public void onPageFinished(String url) {
+        progressBar.setVisibility(View.GONE);
+
+    }
 
     @Override
-    public void onPageError(int errorCode, String description, String failingUrl) { }
+    public void onPageError(int errorCode, String description, String failingUrl) {
+    }
 
     @Override
-    public void onDownloadRequested(String url, String suggestedFilename, String mimeType, long contentLength, String contentDisposition, String userAgent) { }
+    public void onDownloadRequested(String url, String suggestedFilename, String mimeType, long contentLength, String contentDisposition, String userAgent) {
+    }
 
     @Override
-    public void onExternalPageRequest(String url) { }
+    public void onExternalPageRequest(String url) {
+    }
+
+
+    public class WebAppInterface {
+        Context mContext;
+
+        WebAppInterface(Context c) {
+            mContext = c;
+        }
+
+        @JavascriptInterface
+        public void validateBarcode(int count) {
+
+            if (count == 0) {
+                Snackbar.make(mWebView, "Product Add Successfully.",
+                        Snackbar.LENGTH_LONG)
+                        .show();
+            } else {
+                Snackbar.make(mWebView, "Opps! Invalid Barcode.",
+                        Snackbar.LENGTH_LONG)
+                        .show();
+
+            }
+        }
+    }
+
 }
